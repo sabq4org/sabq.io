@@ -1,0 +1,318 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// نموذج المستخدمين
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  username      String?   @unique
+  name          String?
+  avatar        String?
+  password      String
+  role          Role      @default(USER)
+  isVerified    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  emailVerifiedAt DateTime?
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // العلاقات
+  posts         Post[]
+  comments      Comment[]
+  bookmarks     Bookmark[]
+  activities    ActivityLog[]
+  subscriptions StorySubscription[]
+  interactions  UserInteraction[]
+  sessions      Session[]
+
+  @@map("users")
+}
+
+// نموذج الجلسات
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// نموذج التصنيفات
+model Category {
+  id           String  @id @default(cuid())
+  name         String
+  nameAr       String
+  slug         String  @unique
+  description  String?
+  color        String  @default("#0ea5e9")
+  icon         String?
+  isActive     Boolean @default(true)
+  displayOrder Int     @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // العلاقات
+  posts        Post[]
+
+  @@map("categories")
+}
+
+// نموذج المقالات والأخبار
+model Post {
+  id              String      @id @default(cuid())
+  title           String
+  slug            String      @unique
+  excerpt         String?
+  content         String
+  featuredImage   String?
+  type            PostType    @default(NEWS)
+  status          PostStatus  @default(DRAFT)
+  publishedAt     DateTime?
+  readingTime     Int?        // بالدقائق
+  viewsCount      Int         @default(0)
+  likesCount      Int         @default(0)
+  commentsCount   Int         @default(0)
+  tags            String[]    // مصفوفة من الوسوم
+  metadata        Json?       // بيانات إضافية
+  seoTitle        String?
+  seoDescription  String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // العلاقات
+  authorId        String
+  author          User        @relation(fields: [authorId], references: [id])
+  categoryId      String
+  category        Category    @relation(fields: [categoryId], references: [id])
+  comments        Comment[]
+  bookmarks       Bookmark[]
+  interactions    UserInteraction[]
+  storyEvents     StoryEvent[]
+
+  @@map("posts")
+}
+
+// نموذج التعليقات
+model Comment {
+  id          String        @id @default(cuid())
+  content     String
+  status      CommentStatus @default(PENDING)
+  isApproved  Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // العلاقات
+  postId      String
+  post        Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User          @relation(fields: [authorId], references: [id])
+  parentId    String?
+  parent      Comment?      @relation("CommentReplies", fields: [parentId], references: [id])
+  replies     Comment[]     @relation("CommentReplies")
+
+  @@map("comments")
+}
+
+// نموذج المفضلة
+model Bookmark {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // العلاقات
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("bookmarks")
+}
+
+// نموذج القصص (للتتبع الذكي)
+model Story {
+  id              String      @id @default(cuid())
+  title           String
+  description     String?
+  category        String?
+  status          StoryStatus @default(ACTIVE)
+  importanceLevel Int         @default(5)
+  tags            String[]
+  metadata        Json?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // العلاقات
+  events          StoryEvent[]
+  subscriptions   StorySubscription[]
+  predictions     Prediction[]
+
+  @@map("stories")
+}
+
+// نموذج أحداث القصة
+model StoryEvent {
+  id              String   @id @default(cuid())
+  title           String
+  content         String
+  source          String?
+  eventDate       DateTime
+  importanceScore Float    @default(5.0)
+  sentimentScore  Float?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  // العلاقات
+  storyId         String
+  story           Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  postId          String?
+  post            Post?    @relation(fields: [postId], references: [id])
+
+  @@map("story_events")
+}
+
+// نموذج اشتراكات القصص
+model StorySubscription {
+  id                String              @id @default(cuid())
+  notificationLevel NotificationLevel   @default(MEDIUM)
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+
+  // العلاقات
+  userId            String
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId           String
+  story             Story               @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storyId])
+  @@map("story_subscriptions")
+}
+
+// نموذج التفاعلات
+model UserInteraction {
+  id              String          @id @default(cuid())
+  type            InteractionType
+  data            Json?
+  createdAt       DateTime        @default(now())
+
+  // العلاقات
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId          String
+  post            Post            @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("user_interactions")
+}
+
+// نموذج التوقعات
+model Prediction {
+  id              String   @id @default(cuid())
+  predictionText  String
+  confidenceScore Float?
+  predictionDate  DateTime @default(now())
+  actualOutcome   String?
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  // العلاقات
+  storyId         String
+  story           Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@map("predictions")
+}
+
+// نموذج سجل الأنشطة
+model ActivityLog {
+  id         String   @id @default(cuid())
+  action     String
+  entityType String
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  // العلاقات
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("activity_logs")
+}
+
+// نموذج الإعدادات
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  type      String   @default("string")
+  category  String   @default("general")
+  isPublic  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// الأنواع المعرفة (Enums)
+enum Role {
+  SYSTEM_ADMIN
+  ADMIN
+  EDITOR
+  REPORTER
+  USER
+}
+
+enum PostType {
+  NEWS
+  ARTICLE
+  OPINION
+  ANALYSIS
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  DELETED
+}
+
+enum CommentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SPAM
+}
+
+enum StoryStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum NotificationLevel {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum InteractionType {
+  VIEW
+  LIKE
+  SHARE
+  COMMENT
+  BOOKMARK
+}
+
