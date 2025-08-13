@@ -1,0 +1,17 @@
+{
+  "buildCommand": "prisma generate && next build",
+  "installCommand": "npm install && prisma generate",
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/cleanup",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}
